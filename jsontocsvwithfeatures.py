@@ -61,6 +61,7 @@ df = pd.DataFrame(flat)
 
 # One-hot encode length_cat
 df = pd.get_dummies(df, columns=['length_cat'], prefix='length')
+df = df.round(4)
 
 # Save to CSV
 df.to_csv('public_caseswithfeatures.csv', index=False)

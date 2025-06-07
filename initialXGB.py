@@ -7,14 +7,14 @@ from xgboost import XGBRegressor
 import joblib
 
 # Paths
-csv_path   = r'C:\Users\lando\Desktop\AI\8090challenge\public_cases.csv'
-model_path_full  = r'C:\Users\lando\Desktop\AI\8090challenge\xgb_reimbursement_model.joblib'
+csv_path   = r'C:\Users\lando\Desktop\AI\8090challenge\public_caseswithfeatures.csv'
+model_path_full  = r'C:\Users\lando\Desktop\AI\8090challenge\xgb_reimbursement_modelwithfeatures.joblib'
 
 # Load data
 df = pd.read_csv(csv_path)
 
 # Prepare features and target
-X = df[['trip_duration_days', 'miles_traveled', 'total_receipts_amount']]
+X = df.drop("expected_output", axis=1)
 y = df['expected_output'] if 'expected_output' in df.columns else df['reimbursement']
 
 # CV settings
