@@ -14,7 +14,7 @@ def main():
     receipts  = float(sys.argv[3])
 
     # Load model (update path if needed)
-    model = joblib.load('models/xgb_reimbursement_model.joblib')
+    model = joblib.load('xgb_reimbursement_model.joblib')
 
     # Construct feature array (1×3)
     X = np.array([[trip_days, miles, receipts]])

@@ -2,7 +2,7 @@ import json
 import pandas as pd
 
 # Path to your JSON file
-json_path = r'/Users/landoncummings/Desktop/ai proj/8090/top-coder-challenge/public_cases.json'
+json_path = r'C:\Users\lando\Desktop\AI\8090challenge\public_cases.json'
 
 # Load JSON
 with open(json_path, 'r') as f:
