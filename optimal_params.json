@@ -1,0 +1,21 @@
+{
+  "p_diem": 78.11973599034951,
+  "mileage_tier1_cutoff": 195,
+  "mileage_rate_tier1": 0.5877363182339448,
+  "mileage_rate_tier2": 0.330739316011806,
+  "receipt_rate_optimal": 0.7886509389862404,
+  "receipt_rate_overage": 0.4054565882650107,
+  "s_cap_short": 125,
+  "s_cap_medium": 152,
+  "s_cap_long": 59,
+  "bonus_5_day": 85,
+  "bonus_eff_high": 217,
+  "bonus_eff_med": 37,
+  "eff_low": 193,
+  "bonus_round": 2.170874629469764,
+  "penalty_low_cutoff": 12,
+  "penalty_low_amt": 37,
+  "penalty_vac": 195,
+  "penalty_ineff_cutoff": 78,
+  "penalty_ineff_amt": 178
+}

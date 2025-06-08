@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """
-grid_search.py  –  brute-force parameter tuning for the legacy-expense model
-Author: (your name)
+optuna_search.py  –  Bayesian hyperparameter tuning for the legacy-expense model
+using Optuna’s TPE sampler.
 """
 
-import itertools
 import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import optuna
 
 
-# ----------------------------------------------------------------------
-# 1.  Canonical parametric formula
-# ----------------------------------------------------------------------
 def calc_reimbursement(
     days: int,
     miles: int,
@@ -29,23 +26,8 @@ def calc_reimbursement(
 ) -> float:
     """
     Heuristic replica of ACME's black-box formula with six tunable parameters.
-    Returns a single float reimbursement rounded to 2 decimals (like the legacy system).
-
-    Parameters
-    ----------
-    days, miles, receipts : trip inputs
-    base_per_diem         : flat $/day               (≈ 100)
-    five_day_bonus        : extra bump if days == 5  (≈ 25–75)
-    per_mile_rate_first   : $/mile for first 100 mi  (≈ 0.45–0.65)
-    per_mile_rate_drop    : multiplier after 100 mi  (≈ 0.5–1.0)
-    receipt_scale         : baseline % reimbursed    (≈ 0.6–1.0)
-    receipt_diminishing   : curvature beyond $600    (≈ 0.0005–0.002)
-
-    Returns
-    -------
-    float  – reimbursement (2-decimals)
+    Returns reimbursement rounded to 2 decimals.
     """
-
     # Per-diem component
     per_diem = base_per_diem * days
     if days == 5:
@@ -60,7 +42,7 @@ def calc_reimbursement(
             + (miles - 100) * per_mile_rate_first * per_mile_rate_drop
         )
 
-    # Receipts component – diminishing returns past the “sweet spot” ($600-800)
+    # Receipts component – diminishing returns past $600
     if receipts <= 600:
         reimb_receipts = receipts * receipt_scale
     else:
@@ -71,82 +53,40 @@ def calc_reimbursement(
             / (1 + receipt_diminishing * (receipts - 600))
         )
 
-    # Final result – legacy system always rounds to nearest cent
     return round(per_diem + mileage_pay + reimb_receipts, 2)
 
 
-# ----------------------------------------------------------------------
-# 2.  Grid search driver
-# ----------------------------------------------------------------------
-def grid_search_legacy(csv_path: str | Path) -> tuple[dict, float]:
-    """
-    Exhaustive grid search over hand-chosen parameter ranges.
-    Returns (best_params_dict, best_mae).
-    """
+def objective(trial: optuna.trial.Trial) -> float:
+    # Suggest hyperparameters within the last promising bounds
+    base_per_diem = trial.suggest_int("base_per_diem", 40, 60)
+    five_day_bonus = trial.suggest_int("five_day_bonus", 100, 300, step=50)
+    per_mile_rate_first = trial.suggest_float("per_mile_rate_first", 0.65, 0.85)
+    per_mile_rate_drop = trial.suggest_float("per_mile_rate_drop", 0.50, 0.80)
+    receipt_scale = trial.suggest_float("receipt_scale", 0.60, 1.00)
+    receipt_diminishing = trial.suggest_float("receipt_diminishing", 0.0005, 0.0015)
 
-    df = pd.read_csv(csv_path)
-
-    # ------- Hyper-parameter ranges (edit freely) -------
-        # original: 5 * 5 * 5 * 6 * 5 * 4 = 15 000
-    grid = {
-        # best ≈50 → search ±10 in 5 steps
-        "base_per_diem":       [40, 45, 50, 55, 60],
-
-        # best=100 → search 100–300 in 5 steps
-        "five_day_bonus":      [100, 150, 200, 250, 300],
-
-        # best≈0.75 → finer around [0.65–0.85] in 10 steps
-        "per_mile_rate_first": np.linspace(0.65, 0.85, 10),
-
-        # best=0.50 → span 0.50–0.80 in 6 steps
-        "per_mile_rate_drop":  np.linspace(0.50, 0.80, 6),
-
-        # best=0.90 → span 0.60–1.00 in 5 steps
-        "receipt_scale":       [0.60, 0.70, 0.80, 0.90, 1.00],
-
-        # best≈0.0011 → span 0.0005–0.0015 in 5 steps
-        "receipt_diminishing": np.linspace(0.0005, 0.0015, 5),
-    }
+    # Compute predictions and MAE
+    preds = df.apply(
+        lambda r: calc_reimbursement(
+            int(r.trip_duration_days),
+            int(r.miles_traveled),
+            float(r.total_receipts_amount),
+            base_per_diem=base_per_diem,
+            five_day_bonus=five_day_bonus,
+            per_mile_rate_first=per_mile_rate_first,
+            per_mile_rate_drop=per_mile_rate_drop,
+            receipt_scale=receipt_scale,
+            receipt_diminishing=receipt_diminishing,
+        ),
+        axis=1,
+    )
+    mae = float(np.mean(np.abs(preds - df.expected_output)))
+    return mae
 
 
-
-
-    grid_names = list(grid)
-    grid_values = list(grid.values())
-
-    best_params = None
-    best_mae = float("inf")
-
-    # ------- Exhaustive search -------
-    for combo in itertools.product(*grid_values):
-        params = dict(zip(grid_names, combo, strict=True))
-
-        # Vectorised prediction – fast enough for a few 10^4 combos
-        preds = df.apply(
-            lambda r: calc_reimbursement(
-                int(r["trip_duration_days"]),
-                int(r["miles_traveled"]),
-                float(r["total_receipts_amount"]),
-                **params,
-            ),
-            axis=1,
-        )
-
-        mae = np.mean(np.abs(preds - df["expected_output"]))
-
-        if mae < best_mae:
-            best_mae = mae
-            best_params = params
-
-    return best_params, best_mae
-
-
-# ----------------------------------------------------------------------
-# 3.  CLI wrapper
-# ----------------------------------------------------------------------
 def main() -> None:
     if len(sys.argv) != 2:
-        print("Usage: python grid_search.py <csv_file>")
+        print("Usage: python optuna_search.py <csv_file>")
         sys.exit(1)
 
     csv_path = Path(sys.argv[1])
@@ -154,13 +94,21 @@ def main() -> None:
         print(f"File not found: {csv_path}")
         sys.exit(1)
 
-    best_params, best_mae = grid_search_legacy(csv_path)
+    global df
+    df = pd.read_csv(csv_path)
 
-    print("\nBest parameter set:")
-    for k, v in best_params.items():
-        print(f"  {k:22} = {v}")
+    # Create and run the Optuna study
+    study = optuna.create_study(
+        direction="minimize",
+        sampler=optuna.samplers.TPESampler(),
+    )
+    study.optimize(objective, n_trials=200)
 
-    print(f"\nBest MAE over {csv_path.name}: {best_mae:,.4f}")
+    # Output results
+    print("\nBest MAE: {:.4f}".format(study.best_value))
+    print("Best parameters:")
+    for key, val in study.best_params.items():
+        print(f"  {key:22} = {val}")
 
 
 if __name__ == "__main__":
